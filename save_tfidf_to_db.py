@@ -1,37 +1,32 @@
-from app import db
+import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))
+
+from app import app               # 🟢 Import langsung objek Flask app dari app.py
+from database import db
 from models.article import Article
 from models.tfidfscore import TfidfScore
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 
-# Ambil semua artikel dari database
-articles = Article.query.all()
+with app.app_context():
+    articles = Article.query.all()
 
-# Simpan ID dan teksnya
-article_ids = []
-documents = []
+    docs = [a.deskripsi_singkat for a in articles]  # atau 'isi' → sesuai field kamu
+    ids = [a.id for a in articles]
 
-for article in articles:
-    if article.cleaned_content:  # Pastikan udah ada cleaned content
-        article_ids.append(article.id)
-        documents.append(article.cleaned_content)
-    else:
-        print(f"Artikel ID {article.id} tidak punya cleaned_content")
+    vectorizer = TfidfVectorizer(stop_words='english')
+    tfidf_matrix = vectorizer.fit_transform(docs)
+    feature_names = vectorizer.get_feature_names_out()
 
-# Hitung TF-IDF
-vectorizer = TfidfVectorizer()
-tfidf_matrix = vectorizer.fit_transform(documents)
-feature_names = vectorizer.get_feature_names_out()
-
-# Simpan ke database
-for doc_idx, article_id in enumerate(article_ids):
-    tfidf_scores = tfidf_matrix[doc_idx].toarray()[0]
-    for term_idx, score in enumerate(tfidf_scores):
-        if score > 0:
-            term = feature_names[term_idx]
+    for i, article_id in enumerate(ids):
+        row = tfidf_matrix[i]
+        for col_idx in row.nonzero()[1]:
+            term = feature_names[col_idx]
+            score = row[0, col_idx]
             tfidf_entry = TfidfScore(article_id=article_id, term=term, score=score)
             db.session.add(tfidf_entry)
 
-# Commit semua
-db.session.commit()
-print("TF-IDF berhasil disimpan ke database! 💖")
+    db.session.commit()
+    print("✅ TF-IDF scores berhasil disimpan ke database!")

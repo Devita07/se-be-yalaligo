@@ -4,6 +4,8 @@ from flask import Flask, request, jsonify
 from database import db
 from models.article import Article 
 from models.tfidfscore import TfidfScore
+# from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
 
 app = Flask(__name__)
@@ -46,6 +48,57 @@ def search_articles():
         Article.isi.like(f'%{query}%')
     ).all()
     return jsonify([a.to_dict() for a in results]) 
+
+@app.route('/api/search-tfidf', methods=['GET'])
+def search_tfidf():
+    query = request.args.get('q', '')
+    if not query:
+        return jsonify({"error": "Query kosong"}), 400
+
+    # Ambil seluruh term & score dari DB
+    tfidf_data = TfidfScore.query.all()
+    if not tfidf_data:
+        return jsonify({"error": "TF-IDF belum di-generate"}), 500
+
+    # Susun dictionary: {article_id: {term: score}}
+    from collections import defaultdict
+    article_vectors = defaultdict(dict)
+
+    for item in tfidf_data:
+        article_vectors[item.article_id][item.term] = item.score
+
+    # Susun dokumen ulang dalam format vektor
+    terms = list({item.term for item in tfidf_data})
+    docs_matrix = []
+    article_ids = []
+
+    for article_id, term_scores in article_vectors.items():
+        vec = [term_scores.get(term, 0.0) for term in terms]
+        docs_matrix.append(vec)
+        article_ids.append(article_id)
+
+    # Vektorkan query
+    query_vec = [1.0 if term in query.lower().split() else 0.0 for term in terms]
+
+    # Hitung cosine similarity
+    similarities = cosine_similarity([query_vec], docs_matrix)[0]
+
+    # Ambil top 5 hasil
+    top_indices = similarities.argsort()[::-1][:5]
+    top_articles = []
+
+    for idx in top_indices:
+        article = Article.query.get(article_ids[idx])
+        if article:
+            top_articles.append({
+                "id": article.id,
+                "judul": article.judul,
+                "deskripsi": article.deskripsi_singkat,
+                "gambar": article.link_gambar,
+                "skor": round(float(similarities[idx]), 4)
+            })
+
+    return jsonify(top_articles)
 
 if __name__ == '__main__':
     app.run(debug=True)
