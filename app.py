@@ -65,7 +65,8 @@ def search_tfidf():
     if not query:
         return jsonify({"error": "Query kosong"}), 400
 
-    query = clean_text(query)  # 💡 bersihin query dari user!
+    query_cleaned = clean_text(query)  # 💡 bersihin query dari user!
+    query_terms = query_cleaned.split()
 
     # Ambil seluruh term & score dari DB
     tfidf_data = TfidfScore.query.all()
@@ -92,7 +93,7 @@ def search_tfidf():
         article_ids.append(article_id)
 
     # Vektor query
-    query_vec = [1.0 if term in query.lower().split() else 0.0 for term in terms]
+    query_vec = [1.0 if term in query_terms else 0.0 for term in terms]
 
     # Hitung cosine similarity
     similarities = cosine_similarity([query_vec], docs_matrix)[0]
