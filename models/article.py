@@ -9,6 +9,7 @@ class Article(db.Model):
     link_gambar = db.Column(db.String(255), nullable=True)
     deskripsi_singkat = db.Column(db.Text, nullable=True)
     isi = db.Column(db.Text, nullable=False)
+    cleaned_content = db.Column(db.Text, nullable=True)
 
     def to_dict(self):
         return {

@@ -11,15 +11,23 @@ from models.tfidfscore import TfidfScore
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 with app.app_context():
+    # Ambil semua artikel
     articles = Article.query.all()
 
-    docs = [a.deskripsi_singkat for a in articles]  # atau 'isi' → sesuai field kamu
+    # Ambil teks hasil cleaning
+    docs = [a.cleaned_content for a in articles]
     ids = [a.id for a in articles]
 
+    # Buat model TF-IDF
     vectorizer = TfidfVectorizer(stop_words='english')
     tfidf_matrix = vectorizer.fit_transform(docs)
     feature_names = vectorizer.get_feature_names_out()
 
+    # Kosongkan isi tfidf_scores biar tidak dobel
+    TfidfScore.query.delete()
+    db.session.commit()
+
+    # Simpan hasil TF-IDF ke database
     for i, article_id in enumerate(ids):
         row = tfidf_matrix[i]
         for col_idx in row.nonzero()[1]:
@@ -29,4 +37,4 @@ with app.app_context():
             db.session.add(tfidf_entry)
 
     db.session.commit()
-    print("✅ TF-IDF scores berhasil disimpan ke database!")
+    print("✅ TF-IDF scores berhasil disimpan ke database berdasarkan cleaned_content!")

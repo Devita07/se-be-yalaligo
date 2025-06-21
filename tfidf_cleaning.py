@@ -1,6 +1,7 @@
 from flask_sqlalchemy import SQLAlchemy
 import re
 import string
+import pickle
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 # Inisialisasi Flask dan DB
@@ -12,6 +13,8 @@ db = SQLAlchemy(app)
 # Model contoh
 class Article(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    judul = db.Column(db.String(255))
+    deskripsi_singkat = db.Column(db.Text)
     isi = db.Column(db.Text)
     cleaned_content = db.Column(db.Text)  # kolom buat nyimpan hasil bersih (optional)
 
@@ -28,15 +31,24 @@ def clean_text(text):
 with app.app_context():
     articles = Article.query.all()
     for article in articles:
-        article.cleaned_content = clean_text(article.isi)
+        combined = ((article.judul or '') + ' ') * 2 + \
+                   (article.deskripsi_singkat or '') + ' ' + \
+                   (article.isi or '')
+        cleaned = clean_text(combined)
+        article.cleaned_content = cleaned
     db.session.commit()
 
-print("Data berhasil dibersihkan dan disimpan ke kolom 'cleaned_content' ✨")
+print("Semua artikel berhasil dibersihkan dan disimpan ke kolom 'cleaned_content'")
 
 # Misalnya kita ambil data bersihnya
 with app.app_context():
-    texts = [a.cleaned_content for a in Article.query.all()]
+    cleaned_texts = [a.cleaned_content for a in Article.query.all()]
+    vectorizer = TfidfVectorizer()
+    tfidf_matrix = vectorizer.fit_transform(cleaned_texts)
 
-# Hitung TF-IDF
-vectorizer = TfidfVectorizer()
-tfidf_matrix = vectorizer.fit_transform([a.cleaned_content for a in articles])
+    # Simpan vectorizer dan matrix jika mau dipakai saat search
+    with open("tfidf_vectorizer.pkl", "wb") as f:
+        pickle.dump(vectorizer, f)
+    with open("tfidf_matrix.pkl", "wb") as f:
+        pickle.dump(tfidf_matrix, f)
+    print("✅ TF-IDF Vectorizer & Matrix berhasil disimpan.")
