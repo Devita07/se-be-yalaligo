@@ -5,6 +5,7 @@ from database import db
 from models.article import Article 
 from models.tfidfscore import TfidfScore
 from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.feature_extraction.text import TfidfVectorizer
 from flask_cors import CORS
 import re
 import string
@@ -44,7 +45,7 @@ def add_article():
     db.session.commit()
     return jsonify({"message": "Artikel berhasil ditambahkan!"})
 
-# ✅ Endpoint ambil semua artikel (dengan optional paginasi)
+#  Endpoint ambil semua artikel (dengan optional paginasi)
 @app.route('/api/articles', methods=['GET'])
 def get_articles():
     limit = int(request.args.get('limit', 20))
@@ -52,34 +53,31 @@ def get_articles():
     articles = Article.query.offset(offset).limit(limit).all()
     return jsonify([a.to_dict() for a in articles])
 
-# ✅ Endpoint detail artikel by ID (untuk klik detail dari FE)
+#  Endpoint detail artikel by ID (untuk klik detail dari FE)
 @app.route('/api/articles/<int:id>', methods=['GET'])
 def get_article_detail(id):
     article = Article.query.get_or_404(id)
     return jsonify(article.to_dict())
 
-# ✅ Endpoint pencarian dengan TF-IDF
+#  Endpoint pencarian dengan TF-IDF
 @app.route('/api/search-tfidf', methods=['GET'])
 def search_tfidf():
     query = request.args.get('q', '')
     if not query:
         return jsonify({"error": "Query kosong"}), 400
 
-    query_cleaned = clean_text(query)  # 💡 bersihin query dari user!
-    query_terms = query_cleaned.split()
+    query_cleaned = clean_text(query)  
+    
+    articles = Article.query.all()
+    docs = [a.cleaned_content for a in articles]
+    article_ids = [a.id for a in articles]
 
-    # Ambil seluruh term & score dari DB
-    tfidf_data = TfidfScore.query.all()
-    if not tfidf_data:
-        return jsonify({"error": "TF-IDF belum di-generate"}), 500
+    vectorizer = TfidfVectorizer()
+    tfidf_matrix = vectorizer.fit_transform(docs)
 
-    # Buat vektor per artikel: {article_id: {term: score}}
-    from collections import defaultdict
-    article_vectors = defaultdict(dict)
+    query_vector = vectorizer.transform([query_cleaned])
 
-    for item in tfidf_data:
-        article_vectors[item.article_id][item.term] = item.score
-
+    similarities = cosine_similarity(query_vector, tfidf_matrix).flatten()
     # Semua term yang ada
     terms = list({item.term for item in tfidf_data})
 
@@ -97,12 +95,10 @@ def search_tfidf():
 
     # Hitung cosine similarity
     similarities = cosine_similarity([query_vec], docs_matrix)[0]
-    # Ambil top 25 hasil
     top_indices = similarities.argsort()[::-1][:25]
-    # Ambil top 5
-    top_indices = similarities.argsort()[::-1][:5]
     top_articles = []
 
+    query_terms = set(query_cleaned.split())
     for idx in top_indices:
         if similarities[idx] < 0.05:  # ⬅️ Atur batas bawah relevansi
             continue  # Lewati jika tidak relevan
@@ -116,8 +112,19 @@ def search_tfidf():
                 "link_gambar": article.link_gambar,  # 🔁 konsisten nama key-nya
                 "skor": round(float(similarities[idx]), 4)
             })
+        article = articles[idx]
+        article_terms = set(article.cleaned_content.split())
 
+        if not query_terms.issubset(article_terms):
+            continue  
 
+        top_articles.append({
+            "id": article.id,
+            "judul": article.judul,
+            "deskripsi": article.deskripsi_singkat,
+            "link_gambar": article.link_gambar,
+            "skor": round(float(similarities[idx]), 4)
+        })
     return jsonify(top_articles)
 
 if __name__ == '__main__':
