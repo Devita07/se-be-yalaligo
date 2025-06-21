@@ -6,9 +6,10 @@ from models.article import Article
 from models.tfidfscore import TfidfScore
 # from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 
 # Ganti ini ke MySQL
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root@localhost/search_engine_db'
@@ -40,14 +41,14 @@ def get_articles():
     articles = Article.query.all()
     return jsonify([a.to_dict() for a in articles])
 
-@app.route('/api/search', methods=['GET'])
-def search_articles():
-    query = request.args.get('q', '')
-    results = Article.query.filter(
-        Article.judul.like(f'%{query}%') |
-        Article.isi.like(f'%{query}%')
-    ).all()
-    return jsonify([a.to_dict() for a in results]) 
+# @app.route('/api/search', methods=['GET'])
+# def search_articles():
+#     query = request.args.get('q', '')
+#     results = Article.query.filter(
+#         Article.judul.like(f'%{query}%') |
+#         Article.isi.like(f'%{query}%')
+#     ).all()
+#     return jsonify([a.to_dict() for a in results]) 
 
 @app.route('/api/search-tfidf', methods=['GET'])
 def search_tfidf():
@@ -94,11 +95,17 @@ def search_tfidf():
                 "id": article.id,
                 "judul": article.judul,
                 "deskripsi": article.deskripsi_singkat,
-                "gambar": article.link_gambar,
+                "link_gambar": article.link_gambar,
                 "skor": round(float(similarities[idx]), 4)
             })
 
     return jsonify(top_articles)
+
+@app.route('/api/articles/<int:id>', methods=['GET'])
+def get_article_detail(id):
+    article = Article.query.get_or_404(id)
+    return jsonify(article.to_dict())
+
 
 if __name__ == '__main__':
     app.run(debug=True)
