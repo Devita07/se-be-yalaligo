@@ -84,11 +84,14 @@ def search_tfidf():
     # Hitung cosine similarity
     similarities = cosine_similarity([query_vec], docs_matrix)[0]
 
-    # Ambil top 5 hasil
-    top_indices = similarities.argsort()[::-1][:5]
+    # Ambil top 25 hasil
+    top_indices = similarities.argsort()[::-1][:25]
     top_articles = []
 
     for idx in top_indices:
+        if similarities[idx] < 0.05:  # ⬅️ Atur batas bawah relevansi
+            continue  # Lewati jika tidak relevan
+
         article = Article.query.get(article_ids[idx])
         if article:
             top_articles.append({
@@ -98,6 +101,7 @@ def search_tfidf():
                 "link_gambar": article.link_gambar,
                 "skor": round(float(similarities[idx]), 4)
             })
+
 
     return jsonify(top_articles)
 
