@@ -66,6 +66,47 @@ def search_tfidf():
     if not query:
         return jsonify({"error": "Query kosong"}), 400
 
+    query_cleaned = clean_text(query)
+
+    # Ambil semua artikel dan cleaned_content
+    articles = Article.query.all()
+    docs = [a.cleaned_content for a in articles]
+    article_ids = [a.id for a in articles]
+
+    if not docs:
+        return jsonify([])
+
+    # TF-IDF vectorization
+    vectorizer = TfidfVectorizer()
+    tfidf_matrix = vectorizer.fit_transform(docs)
+    query_vector = vectorizer.transform([query_cleaned])
+
+    # Hitung cosine similarity
+    similarities = cosine_similarity(query_vector, tfidf_matrix).flatten()
+
+    # Ambil top 25 hasil dengan skor tertinggi
+    top_indices = similarities.argsort()[::-1][:25]
+
+    top_articles = []
+    for idx in top_indices:
+        if similarities[idx] < 0.05:
+            continue  # lewati yang tidak relevan
+
+        article = articles[idx]
+        top_articles.append({
+            "id": article.id,
+            "judul": article.judul,
+            "deskripsi": article.deskripsi_singkat,
+            "link_gambar": article.link_gambar,
+            "skor": round(float(similarities[idx]), 4)
+        })
+
+    return jsonify(top_articles)
+
+    query = request.args.get('q', '')
+    if not query:
+        return jsonify({"error": "Query kosong"}), 400
+
     query_cleaned = clean_text(query)  
     
     articles = Article.query.all()
